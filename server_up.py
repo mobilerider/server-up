@@ -21,12 +21,10 @@ def server_public_addr(server):
 class ServerWatcherThread(Thread):
     expected_statuses = ['active', 'error', 'available', 'completed']
 
-    def __init__(self, server, initial_ip=None, callback=None,
-                 *callback_args, **callback_kwargs):
+    def __init__(self, server, initial_ip=None, *callback_args, **callback_kwargs):
         super(ServerWatcherThread, self).__init__()
         self.server = server
         self.initial_ip = initial_ip
-        self.callback = callback
         self.callback_args = callback_args
         self.callback_kwargs = callback_kwargs
 
@@ -69,38 +67,35 @@ class ServerWatcherThread(Thread):
 
         self.server = pyrax.cloudservers.servers.get(self.server.id)
 
-        if self.callback:
-            self.callback_result = self.callback(self.server, *self.callback_args, **self.callback_kwargs)
-
 
 def get_arguments():
     parser = ArgumentParser()
     parser.add_argument('-c', '--config',   type=FileType('r'), help='JSON settings file', dest='config_file')
 
     settings_map = {
-        'count':      parser.add_argument('-n', '--count',      type=int, help='How many servers to create'),
-        'hostname':   parser.add_argument('-H', '--hostname',   type=str, help='Server hostname. Use `{hash}` to specify where to place the generated UUID.'),
-        'script':     parser.add_argument('-s', '--script',     type=str, help='Script to run in each server when created'),
-        'rackuser':   parser.add_argument('-u', '--rackuser',   type=str, help='Rackspace API username'),
-        'rackpass':   parser.add_argument('-p', '--rackpass',   type=str, help='Rackspace API key (recommended) or password (not recommended)'),
-        'sshkey':     parser.add_argument('-k', '--sshkey',     type=str, help='Name of the SSH Key to include in the server'),
-        'rackzone':   parser.add_argument('-z', '--rackzone',   type=str, help='Rackspace availability zone'),
-        'rackdistro': parser.add_argument('-d', '--rackdistro', type=str, help='Rackspace distribution ID'),
-        'rackflavor': parser.add_argument('-f', '--rackflavor', type=str, help='Rackspace flavor ID'),
+        'count':      parser.add_argument('-n', '--count',
+            type=int, help='How many servers to create'),
+        'hostname':   parser.add_argument('-H', '--hostname',
+            type=str, help='Server hostname. Use `{hash}` to specify where to place the generated UUID.'),
+        'script':     parser.add_argument('-s', '--script',
+            type=str, help='Script to run in each server when created'),
+        'rackuser':   parser.add_argument('-u', '--rackuser',
+            type=str, help='Rackspace API username'),
+        'rackpass':   parser.add_argument('-p', '--rackpass',
+            type=str, help='Rackspace API key (recommended) or password (not recommended)'),
+        'sshkey':     parser.add_argument('-k', '--sshkey',
+            type=str, help='Name of the SSH Key to include in the server'),
+        'rackzone':   parser.add_argument('-z', '--rackzone',
+            type=str, help='Rackspace availability zone', default='DFW'),
+        'rackdistro': parser.add_argument('-d', '--rackdistro',
+            type=str, help='Rackspace distribution ID', default='5cc098a5-7286-4b96-b3a2-49f4c4f82537'),
+        'rackflavor': parser.add_argument('-f', '--rackflavor',
+            type=str, help='Rackspace flavor ID', default=2),
     }
 
     args = parser.parse_args()
     config_from_file = {}
     config_file_source = None
-
-    if not getattr(args, 'rackzone', None):
-        args.rackzone = 'DFW'
-
-    if not getattr(args, 'rackdistro', None):
-        args.rackdistro = '5cc098a5-7286-4b96-b3a2-49f4c4f82537'
-
-    if not getattr(args, 'rackflavor', None):
-        args.rackflavor = 2
 
     if args.config_file:
         config_from_file = json.load(args.config_file)
