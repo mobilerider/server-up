@@ -155,21 +155,38 @@ def custom_excepthook(type, value, traceback):
 
 
 def run_deploy_script(server, arguments):
+    ssh_process_exit_code = 255
+    retries = 4
     address = server.accessIPv4
-    ssh_process = Popen(
-        [
-            'ssh', '-o', 'StrictHostKeyChecking=no', '-t', 'root@{address}'.format(address=address),
-            'bash -s {hostname}'.format(hostname=arguments.hostname),
-        ],
-        stdin=subprocess_PIPE,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
-    ssh_process.communicate(input=arguments.script_content)
-    print 'ssh root@{address} remote command exit code: {code}'.format(
-        address=address,
-        code=ssh_process.wait(),
-    )
+
+    while ssh_process_exit_code != 0 and retries > 0:
+        ssh_process = Popen(
+            [
+                'ssh', '-o', 'StrictHostKeyChecking=no', '-t', 'root@{address}'.format(address=address),
+                'bash -s {hostname}'.format(hostname=arguments.hostname),
+            ],
+            stdin=subprocess_PIPE,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        ssh_process.communicate(input=arguments.script_content)
+        ssh_process_exit_code = ssh_process.wait()
+        retries = retries - 1
+        if ssh_process_exit_code != 0:
+            sleep(2)
+
+    if ssh_process_exit_code == 0:
+        print 'ssh root@{address} remote command exit code: {code}'.format(
+            address=address,
+            code=ssh_process_exit_code,
+        )
+    else:
+        print '>> FAILED: ssh root@{address} remote command exit code: {code}'.format(
+            address=address,
+            code=ssh_process_exit_code,
+        )
+
+    return ssh_process_exit_code
 
 
 def main():
