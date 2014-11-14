@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import deepcopy, copy
 from uuid import uuid4
 from argparse import ArgumentParser, ArgumentError, FileType, _get_action_name as argparse_get_action_name
 from subprocess import Popen, PIPE as subprocess_PIPE
@@ -13,7 +13,11 @@ import requests
 
 def server_public_addr(server):
     try:
-        return [addr for addr in server.addresses['public'] if addr['version'] == 4][0]['addr']
+        return [
+            addr
+            for addr in server.addresses['public']
+            if addr['version'] == 4
+        ][0]['addr']
     except (KeyError, IndexError):
         return getattr(server, 'accessIPv4', None)
 
@@ -36,29 +40,36 @@ class ServerWatcherThread(Thread):
             self.server = pyrax.cloudservers.servers.get(self.server.id)
             if not self.server.status.lower() in self.expected_statuses:
                 if not printed_status:
-                    print 'Waiting for server {name} ({id}) to be ready... (Status: {status})'.format(
-                        name=self.server.name,
-                        id=self.server.id,
-                        status=self.server.status,
-                        address=getattr(self.server, 'accessIPv4', self.initial_ip),
-                    )
+                    print (
+                        'Waiting for server {name} ({id}) to be ready... ' +
+                        '(Status: {status})').format(
+                            name=self.server.name,
+                            id=self.server.id,
+                            status=self.server.status,
+                            address=getattr(
+                                self.server, 'accessIPv4', self.initial_ip),
+                        )
                     printed_status = True
                 continue
 
             if self.server.status in ('error', 'ERROR', ):
-                raise Exception('Server {name} ({id}) finished with "ERROR" status'.format(
+                raise Exception((
+                    'Server {name} ({id}) finished with ' +
+                    '"ERROR" status').format(
                     name=self.server.name,
                     id=self.server.id,
                 ))
 
             if getattr(self.server, 'accessIPv4', self.initial_ip) == server_public_addr(self.server):
                 if not printed_access:
-                    print 'Waiting for server {name} ({id}) to be accessible... (Current: {address})'.format(
-                        name=self.server.name,
-                        id=self.server.id,
-                        status=self.server.status,
-                        address=getattr(self.server, 'accessIPv4', self.initial_ip),
-                    )
+                    print (
+                        'Waiting for server {name} ({id}) to be ' +
+                        'accessible... (Current: {address})').format(
+                            name=self.server.name,
+                            id=self.server.id,
+                            status=self.server.status,
+                            address=getattr(self.server, 'accessIPv4', self.initial_ip),
+                        )
                     printed_access = True
                 continue
 
@@ -70,27 +81,39 @@ class ServerWatcherThread(Thread):
 
 def get_arguments():
     parser = ArgumentParser()
-    parser.add_argument('-c', '--config',   type=FileType('r'), help='JSON settings file', dest='config_file')
+    parser.add_argument('-c', '--config',
+        type=FileType('r'), help='JSON settings file', dest='config_file')
 
     settings_map = {
-        'count':      parser.add_argument('-n', '--count',
+        'count': parser.add_argument('-n', '--count',
             type=int, help='How many servers to create'),
-        'hostname':   parser.add_argument('-H', '--hostname',
-            type=str, help='Server hostname. Use `{hash}` to specify where to place the generated UUID.'),
-        'script':     parser.add_argument('-s', '--script',
+        'hostname': parser.add_argument('-H', '--hostname',
+            type=str, help=('Server hostname. Use `{hash}` to specify ' +
+            'where to place the generated UUID.')),
+        'script_up':parser.add_argument('-s', '--script', dest='script',
             type=str, help='Script to run in each server when created'),
-        'rackuser':   parser.add_argument('-u', '--rackuser',
+        'rackuser': parser.add_argument('-u', '--rackuser',
             type=str, help='Rackspace API username'),
-        'rackpass':   parser.add_argument('-p', '--rackpass',
-            type=str, help='Rackspace API key (recommended) or password (not recommended)'),
-        'sshkey':     parser.add_argument('-k', '--sshkey',
+        'rackpass': parser.add_argument('-p', '--rackpass',
+            type=str, help=('Rackspace API key (recommended) or ' +
+            'password (not recommended)')),
+        'sshkey': parser.add_argument('-k', '--sshkey',
             type=str, help='Name of the SSH Key to include in the server'),
-        'rackzone':   parser.add_argument('-z', '--rackzone',
+        'rackzone': parser.add_argument('-z', '--rackzone',
             type=str, help='Rackspace availability zone', default='DFW'),
         'rackdistro': parser.add_argument('-d', '--rackdistro',
-            type=str, help='Rackspace distribution ID', default='5cc098a5-7286-4b96-b3a2-49f4c4f82537'),
+            type=str, help='Rackspace distribution ID',
+            default='5cc098a5-7286-4b96-b3a2-49f4c4f82537'),
         'rackflavor': parser.add_argument('-f', '--rackflavor',
             type=str, help='Rackspace flavor ID', default=2),
+        'sshuser': parser.add_argument('--sshuser',
+            type=str, default='root',
+            help='User used while connecting using SSH'),
+        'script_up_args': parser.add_argument('-a', '--args',
+            dest='script_args', type=str, required=False,
+            help='Additional arguments for the Bash script.'),
+        'load_balancer': parser.add_argument('-l', '--load-balancer',
+            type=str, help='Loadbalancer to which attach the new servers'),
     }
 
     args = parser.parse_args()
@@ -109,40 +132,53 @@ def get_arguments():
             pass
 
     for key, action in settings_map.items():
-        if not getattr(args, key, None):
-            setattr(args, key, config_from_file.get(key, None))
+        action.dest = action.dest or key
+        if not getattr(args, action.dest, None):
+            setattr(args, action.dest, config_from_file.get(key, None))
 
-        if not getattr(args, key, None):
+        if not getattr(args, action.dest, None) and action.required:
             raise ArgumentError(action,
                 'Missing argument (must be present as a command '
-                'line `--{argument}` or as a key in the settings file). '
-                '{config_src}'.format(
+                'line `--{argument}` or as a key "{key}" in the settings file). '
+                '[{config_src}]'.format(
+                    key=key,
                     argument=argparse_get_action_name(action),
                     config_src=config_file_source))
 
     if args.count < 1:
         raise ArgumentError(
             settings_map['count'],
-            'Server count must be higher than zero. {config_src}'.format(
+            'Server count must be higher than zero. [{config_src}]'.format(
                 config_src=config_file_source))
 
     if args.count > 1 and not '{hash}' in args.hostname:
         raise ArgumentError(settings_map['hostname'],
             'Hostname value does not contain the `{hash}` placeholder. This is'
             'needed when the `count` arguments is higher than `1`. '
-            '{config_src}'.format(config_src=config_file_source, hash='{hash}'))
+            '[{config_src}]'.format(
+                config_src=config_file_source, hash='{hash}'))
 
     script_response = requests.get(args.script)
-    if not script_response.ok:
-        raise ArgumentError(settings_map['script'],
-            'Url `{script}` returned a non-OK response: ({status_code}):'
-            '{response_content}. {config_src}'.format(
-                config_src=config_file_source,
-                status_code=script_response.status_code,
-                response_content=script_response.content,
-            ))
+    try:
+        if not script_response.ok:
+            raise ArgumentError(settings_map['script'],
+                'Url `{script}` returned a non-OK response: ({status_code}):'
+                '{response_content}. [{config_src}]'.format(
+                    script=args.script,
+                    config_src=config_file_source,
+                    status_code=script_response.status_code,
+                    response_content=script_response.content,
+                ))
 
-    args.script_content = script_response.content
+        args.script_content = script_response.content
+    except requests.ConnectionError, error:
+        raise ArgumentError(settings_map['script'],
+            ('Url `{script}` raised a network error: {error}. ' +
+             '[{config_src}]').format(
+                script=args.script,
+                config_src=config_file_source,
+                error=repr(error),
+            ))
 
     return args
 
@@ -158,12 +194,25 @@ def run_deploy_script(server, arguments):
     ssh_process_exit_code = 255
     retries = 4
     address = server.accessIPv4
+    script_args = '{hostname} {args}'.format(
+        hostname=arguments.hostname,
+        args=arguments.script_args,
+    )
 
     while ssh_process_exit_code != 0 and retries > 0:
         ssh_process = Popen(
             [
-                'ssh', '-o', 'StrictHostKeyChecking=no', '-t', 'root@{address}'.format(address=address),
-                'bash -s {hostname}'.format(hostname=arguments.hostname),
+                'ssh',
+                '-o',
+                'StrictHostKeyChecking=no',
+                '-t',
+                '{sshuser}@{address}'.format(
+                    sshuser=arguments.sshuser,
+                    address=address
+                ),
+                'bash -s {script_args}'.format(
+                    script_args=script_args,
+                ),
             ],
             stdin=subprocess_PIPE,
             stdout=sys.stdout,
@@ -176,15 +225,21 @@ def run_deploy_script(server, arguments):
             sleep(2)
 
     if ssh_process_exit_code == 0:
-        print 'ssh root@{address} remote command exit code: {code}'.format(
-            address=address,
-            code=ssh_process_exit_code,
-        )
+        print (
+            'ssh {sshuser}@{address} remote command ' +
+            'exit code: {code}').format(
+                sshuser=arguments.sshuser,
+                address=address,
+                code=ssh_process_exit_code,
+            )
     else:
-        print '>> FAILED: ssh root@{address} remote command exit code: {code}'.format(
-            address=address,
-            code=ssh_process_exit_code,
-        )
+        print (
+            '>> FAILED: ssh {sshuser}@{address} remote command ' +
+            'exit code: {code}').format(
+                sshuser=arguments.sshuser,
+                address=address,
+                code=ssh_process_exit_code,
+            )
 
     return ssh_process_exit_code
 
@@ -198,14 +253,31 @@ def main():
     pyrax.set_setting('identity_type', 'rackspace')
     pyrax.set_credentials(arguments.rackuser, arguments.rackpass)
     pyrax.cloudservers = pyrax.connect_to_cloudservers()
+    pyrax.cloud_loadbalancers = pyrax.connect_to_cloud_loadbalancers()
 
     flavor_obj = pyrax.cloudservers.flavors.get(arguments.rackflavor)
     distro_obj = pyrax.cloudservers.images.get(arguments.rackdistro)
 
+    load_balancer = None
+    for balancer in pyrax.cloud_loadbalancers.list():
+        if arguments.load_balancer in (str(balancer.id), balancer.name):
+            load_balancer = balancer
+            break
+
+    arguments.load_balancer = load_balancer if load_balancer else None
+    if not load_balancer:
+        print (
+            'WARNING: Load balancer "{load_balancer}" not found.' +
+            'Continuing without registering any server in any load balancer'
+        ).format(
+            load_balancer=arguments.load_balancer,
+        )
+
     watchers = []
 
     for index in xrange(arguments.count):
-        server_arguments = deepcopy(arguments)
+        # server_arguments = deepcopy(arguments)
+        server_arguments = copy(arguments)
         server_arguments.hostname = arguments.hostname.format(hash=uuid4().hex)
         server = pyrax.cloudservers.servers.create(
             name=server_arguments.hostname,
@@ -218,8 +290,9 @@ def main():
                 {'uuid': '00000000-0000-0000-0000-000000000000', },
             ]
         )
-        watcher = ServerWatcherThread(server, initial_ip=server_public_addr(server))
-        watcher.server_arguments = server_arguments
+        watcher = ServerWatcherThread(
+            server, initial_ip=server_public_addr(server))
+        setattr(watcher, 'server_arguments', server_arguments)
         watcher.start()
         watchers.append(watcher)
 
@@ -232,6 +305,8 @@ def main():
 
     for watcher in watchers:
         run_deploy_script(watcher.server, watcher.server_arguments)
+
+    # TODO: Include these new servers into the loadbalancer if any is provided
 
 
 if __name__ == '__main__':
