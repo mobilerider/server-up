@@ -253,8 +253,8 @@ def main():
     pyrax.set_setting('identity_type', 'rackspace')
     pyrax.set_credentials(arguments.rackuser, arguments.rackpass)
     pyrax.set_default_region(arguments.rackzone)
-    pyrax.cloudservers = pyrax.connect_to_cloudservers()
-    pyrax.cloud_loadbalancers = pyrax.connect_to_cloud_loadbalancers()
+    pyrax.cloudservers = pyrax.connect_to_cloudservers(region=arguments.rackzone)
+    pyrax.cloud_loadbalancers = pyrax.connect_to_cloud_loadbalancers(region=arguments.rackzone)
 
     flavor_obj = pyrax.cloudservers.flavors.get(arguments.rackflavor)
     distro_obj = pyrax.cloudservers.images.get(arguments.rackdistro)
