@@ -252,6 +252,7 @@ def main():
 
     pyrax.set_setting('identity_type', 'rackspace')
     pyrax.set_credentials(arguments.rackuser, arguments.rackpass)
+    pyrax.set_default_region(arguments.rackzone)
     pyrax.cloudservers = pyrax.connect_to_cloudservers()
     pyrax.cloud_loadbalancers = pyrax.connect_to_cloud_loadbalancers()
 
