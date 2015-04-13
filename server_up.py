@@ -278,7 +278,8 @@ def main():
     for index in xrange(arguments.count):
         # server_arguments = deepcopy(arguments)
         server_arguments = copy(arguments)
-        server_arguments.hostname = arguments.hostname.format(hash=uuid4().hex)
+        server_arguments.hostname = arguments.hostname.format(hash=uuid4().hex,
+            zone=server_arguments.rackzone.lower())
         server = pyrax.cloudservers.servers.create(
             name=server_arguments.hostname,
             image=distro_obj,
