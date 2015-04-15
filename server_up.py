@@ -53,7 +53,7 @@ class ServerWatcherThread(Thread):
                 continue
 
             if self.server.status in ('error', 'ERROR', ):
-                raise Exception((
+                raise ValueError((
                     'Server {name} ({id}) finished with ' +
                     '"ERROR" status').format(
                     name=self.server.name,
@@ -100,14 +100,13 @@ def get_arguments():
         'sshkey': parser.add_argument('-k', '--sshkey',
             type=str, help='Name of the SSH Key to include in the server'),
         'rackzone': parser.add_argument('-z', '--rackzone',
-            type=str, help='Rackspace availability zone', default='DFW'),
+            type=str, help='Rackspace availability zone', required=False),
         'rackdistro': parser.add_argument('-d', '--rackdistro',
-            type=str, help='Rackspace distribution ID',
-            default='5cc098a5-7286-4b96-b3a2-49f4c4f82537'),
+            type=str, help='Rackspace distribution ID', required=False),
         'rackflavor': parser.add_argument('-f', '--rackflavor',
-            type=str, help='Rackspace flavor ID', default=2),
+            type=str, help='Rackspace flavor ID', required=False),
         'sshuser': parser.add_argument('--sshuser',
-            type=str, default='root',
+            type=str, required=False,
             help='User used while connecting using SSH'),
         'script_up_args': parser.add_argument('-a', '--args',
             dest='script_args', type=str, required=False,
@@ -116,6 +115,12 @@ def get_arguments():
             type=str, help='Loadbalancer to which attach the new servers'),
     }
 
+    defaults = {
+        'rackzone': 'DFW',
+        'rackdistro': '5cc098a5-7286-4b96-b3a2-49f4c4f82537',
+        'rackflavor': 2,
+        'sshuser': 'root',
+    }
     args = parser.parse_args()
     config_from_file = {}
     config_file_source = None
@@ -131,8 +136,12 @@ def get_arguments():
         except IOError:
             pass
 
+    for k, v in defaults.items():
+        config_from_file.setdefault(k, v)
+
     for key, action in settings_map.items():
         action.dest = action.dest or key
+
         if not getattr(args, action.dest, None):
             setattr(args, action.dest, config_from_file.get(key, None))
 
@@ -250,11 +259,9 @@ def main():
 
     arguments = get_arguments()
 
-    pyrax.set_setting('identity_type', 'rackspace')
-    pyrax.set_credentials(arguments.rackuser, arguments.rackpass)
     pyrax.set_default_region(arguments.rackzone)
-    pyrax.cloudservers = pyrax.connect_to_cloudservers(region=arguments.rackzone)
-    pyrax.cloud_loadbalancers = pyrax.connect_to_cloud_loadbalancers(region=arguments.rackzone)
+    pyrax.set_setting('identity_type', 'rackspace')
+    pyrax.set_credentials(arguments.rackuser, arguments.rackpass, region=arguments.rackzone)
 
     flavor_obj = pyrax.cloudservers.flavors.get(arguments.rackflavor)
     distro_obj = pyrax.cloudservers.images.get(arguments.rackdistro)
